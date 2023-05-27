@@ -1,0 +1,370 @@
+-- Exclui o Banco de Dados e o Usuário
+IF EXISTS(SELECT name FROM sys.databases WHERE name = 'uvv')
+BEGIN
+    ALTER DATABASE uvv SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE uvv;
+END
+
+IF EXISTS(SELECT name FROM sys.syslogins WHERE name = 'bruno')
+BEGIN
+    DROP LOGIN bruno;
+END
+
+-- Cria o Banco de dados e o Usuário
+CREATE LOGIN bruno WITH PASSWORD = 'computacao@raiz';
+GO
+
+CREATE DATABASE uvv;
+GO
+
+USE uvv;
+GO
+
+CREATE USER bruno FOR LOGIN bruno;
+GO
+
+-- Cria o Esquema para Lojas UVV
+CREATE SCHEMA lojas AUTHORIZATION bruno;
+GO
+
+ALTER USER bruno
+SET DEFAULT_SCHEMA lojas;
+GO
+
+-- Cria a Tabela produtos
+CREATE TABLE lojas.produtos (
+    produto_id                 DECIMAL(38, 0)     NOT NULL,
+    nome                       VARCHAR(255)       NOT NULL,
+    preco_unitario             DECIMAL(10, 2),
+    detalhes                   VARBINARY(MAX),
+    imagem                     VARBINARY(MAX),
+    imagem_mime_type           VARCHAR(512),
+    imagem_arquivo             VARCHAR(512),
+    imagem_charset             VARCHAR(512),
+    imagem_ultima_atualizacao  DATE,
+    CONSTRAINT pk_produtos PRIMARY KEY (produto_id)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela referente aos produtos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação de cada produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Nome de cada produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'nome';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor de cada produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'preco_unitario';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Informações sobre cada produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'detalhes';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Imagem de cada produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'imagem';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tipo MIME da imagem do produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'imagem_mime_type';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Nome do arquivo de imagem do produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'imagem_arquivo';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Charset da imagem do produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'imagem_charset';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Última data de atualização da imagem do produto das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'imagem_ultima_atualizacao';
+GO
+
+-- Cria a Função para Calcular Desconto
+CREATE FUNCTION lojas.calcular_desconto (
+    @preco DECIMAL(10, 2),
+    @desconto DECIMAL(5, 2)
+)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    DECLARE @preco_com_desconto DECIMAL(10, 2);
+    SET @preco_com_desconto = @preco - (@preco * @desconto / 100);
+    RETURN @preco_com_desconto;
+END;
+GO
+
+-- Comentários da Função e Parâmetros
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Função para calcular o valor com desconto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto', @level2type=N'PARAMETER',@level2name=N'@preco';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Percentual de desconto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto', @level2type=N'PARAMETER',@level2name=N'@desconto';
+GO
+
+-- Adiciona uma Restrição de Verificação na Tabela Produtos
+ALTER TABLE lojas.produtos
+ADD CONSTRAINT ck_preco_unitario CHECK (preco_unitario > 0);
+GO
+
+-- Cria a Tabela Pedidos
+CREATE TABLE lojas.pedidos (
+    pedido_id                  DECIMAL(38, 0)     NOT NULL,
+    data_pedido                DATE               NOT NULL,
+    total_pedido               DECIMAL(10, 2),
+    CONSTRAINT pk_pedidos PRIMARY KEY (pedido_id)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela referente aos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação de cada pedido das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Data em que o pedido foi realizado nas lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'data_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Total do pedido nas lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'total_pedido';
+GO
+
+-- Cria a Tabela Itens Pedido
+CREATE TABLE lojas.itens_pedido (
+    pedido_id                  DECIMAL(38, 0)     NOT NULL,
+    item_id                    DECIMAL(38, 0)     NOT NULL,
+    produto_id                 DECIMAL(38, 0)     NOT NULL,
+    quantidade                 INT                NOT NULL,
+    preco_unitario             DECIMAL(10, 2),
+    CONSTRAINT pk_itens_pedido PRIMARY KEY (pedido_id, item_id),
+    CONSTRAINT fk_itens_pedido_pedidos FOREIGN KEY (pedido_id) REFERENCES lojas.pedidos (pedido_id),
+    CONSTRAINT fk_itens_pedido_produtos FOREIGN KEY (produto_id) REFERENCES lojas.produtos (produto_id)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela referente aos itens dos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido ao qual o item pertence.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do item do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'item_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Quantidade do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'quantidade';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor unitário do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'preco_unitario';
+GO
+
+-- Cria a Chave Primária e Índices da Tabela Itens Pedido
+ALTER TABLE lojas.itens_pedido
+ADD CONSTRAINT fk_itens_pedido PRIMARY KEY (pedido_id, item_id);
+GO
+
+-- Cria uma Função Escalar para Calcular Total do Pedido
+CREATE FUNCTION lojas.calcular_total_pedido (
+    @pedido_id DECIMAL(38, 0)
+)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    DECLARE @total_pedido DECIMAL(10, 2);
+    SELECT @total_pedido = SUM(quantidade * preco_unitario)
+    FROM lojas.itens_pedido
+    WHERE pedido_id = @pedido_id;
+    RETURN @total_pedido;
+END;
+GO
+
+-- Comentários da Função e Parâmetros
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Função para calcular o total do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_total_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_total_pedido', @level2type=N'PARAMETER',@level2name=N'@pedido_id';
+GO
+
+-- Atualiza o Total do Pedido
+UPDATE lojas.pedidos
+SET total_pedido = lojas.calcular_total_pedido(pedido_id);
+GO
+
+-- Concede Permissões de Acesso ao Usuário
+GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::lojas TO bruno;
+GRANT EXECUTE ON lojas.calcular_desconto TO bruno;
+GRANT EXECUTE ON lojas.calcular_total_pedido TO bruno;
+GO
+-- Cria o Schema lojas
+CREATE SCHEMA lojas;
+GO
+
+-- Cria a Tabela Pedidos
+CREATE TABLE lojas.pedidos (
+    pedido_id                  DECIMAL(38, 0)     NOT NULL,
+    data_pedido                DATE               NOT NULL,
+    total_pedido               DECIMAL(10, 2),
+    CONSTRAINT pk_pedidos PRIMARY KEY (pedido_id)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela referente aos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação de cada pedido das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Data em que o pedido foi realizado nas lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'data_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Total do pedido nas lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'total_pedido';
+GO
+
+-- Cria a Tabela Itens Pedido
+CREATE TABLE lojas.itens_pedido (
+    pedido_id                  DECIMAL(38, 0)     NOT NULL,
+    item_id                    DECIMAL(38, 0)     NOT NULL,
+    produto_id                 DECIMAL(38, 0)     NOT NULL,
+    quantidade                 INT                NOT NULL,
+    preco_unitario             DECIMAL(10, 2),
+    CONSTRAINT pk_itens_pedido PRIMARY KEY (pedido_id, item_id),
+    CONSTRAINT fk_itens_pedido_pedidos FOREIGN KEY (pedido_id) REFERENCES lojas.pedidos (pedido_id),
+    CONSTRAINT fk_itens_pedido_produtos FOREIGN KEY (produto_id) REFERENCES lojas.produtos (produto_id)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela referente aos itens dos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido ao qual o item pertence.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do item do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'item_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Quantidade do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'quantidade';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor unitário do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'preco_unitario';
+GO
+
+-- Cria a Chave Primária e Índices da Tabela Itens Pedido
+ALTER TABLE lojas.itens_pedido
+ADD CONSTRAINT fk_itens_pedido PRIMARY KEY (pedido_id, item_id);
+GO
+
+-- Cria uma Função Escalar para Calcular Desconto
+CREATE FUNCTION lojas.calcular_desconto (
+    @preco_unitario DECIMAL(10, 2),
+    @percentual_desconto INT
+)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    DECLARE @preco_com_desconto DECIMAL(10, 2);
+    SET @preco_com_desconto = @preco_unitario - (@preco_unitario * (@percentual_desconto / 100.0));
+    RETURN @preco_com_desconto;
+END;
+GO
+
+-- Comentários da Função e Parâmetros
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Função para calcular o preço com desconto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Preço unitário do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto', @level2type=N'PARAMETER',@level2name=N'@preco_unitario';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Percentual de desconto aplicado ao produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_desconto', @level2type=N'PARAMETER',@level2name=N'@percentual_desconto';
+GO
+
+-- Cria uma Função Escalar para Calcular Total do Pedido
+CREATE FUNCTION lojas.calcular_total_pedido (
+    @pedido_id DECIMAL(38, 0)
+)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    DECLARE @total_pedido DECIMAL(10, 2);
+    SELECT @total_pedido = SUM(quantidade * preco_unitario) FROM lojas.itens_pedido WHERE pedido_id = @pedido_id;
+    RETURN @total_pedido;
+END;
+GO
+
+-- Comentários da Função e Parâmetros
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Função para calcular o total do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_total_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'FUNCTION',@level1name=N'calcular_total_pedido', @level2type=N'PARAMETER',@level2name=N'@pedido_id';
+GO
+
+-- Cria a Visão Pedidos Detalhados
+CREATE VIEW lojas.pedidos_detalhados
+AS
+SELECT
+    p.pedido_id,
+    p.data_pedido,
+    i.item_id,
+    i.produto_id,
+    i.quantidade,
+    i.preco_unitario,
+    lojas.calcular_desconto(i.preco_unitario, 10) AS preco_unitario_com_desconto,
+    (i.quantidade * i.preco_unitario) AS subtotal
+FROM
+    lojas.pedidos p
+    JOIN lojas.itens_pedido i ON p.pedido_id = i.pedido_id;
+GO
+
+-- Comentários da Visão e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Visão contendo detalhes dos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Data em que o pedido foi realizado.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'data_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do item do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'item_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Quantidade do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'quantidade';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor unitário do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'preco_unitario';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Valor unitário do produto com desconto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'preco_unitario_com_desconto';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Subtotal do item do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'VIEW',@level1name=N'pedidos_detalhados', @level2type=N'COLUMN',@level2name=N'subtotal';
+GO
+-- Cria a Tabela Produtos
+CREATE TABLE lojas.produtos (
+    produto_id INT PRIMARY KEY,
+    nome VARCHAR(100),
+    descricao VARCHAR(500),
+    preco DECIMAL(10, 2),
+    categoria_id INT
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela contendo informações dos produtos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Nome do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'nome';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Descrição do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'descricao';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Preço do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'preco';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação da categoria do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'produtos', @level2type=N'COLUMN',@level2name=N'categoria_id';
+GO
+
+-- Cria a Tabela Categorias
+CREATE TABLE lojas.categorias (
+    categoria_id INT PRIMARY KEY,
+    nome VARCHAR(100),
+    descricao VARCHAR(500)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela contendo informações das categorias dos produtos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'categorias';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação da categoria.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'categorias', @level2type=N'COLUMN',@level2name=N'categoria_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Nome da categoria.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'categorias', @level2type=N'COLUMN',@level2name=N'nome';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Descrição da categoria.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'categorias', @level2type=N'COLUMN',@level2name=N'descricao';
+GO
+
+-- Cria a Tabela Pedidos
+CREATE TABLE lojas.pedidos (
+    pedido_id INT PRIMARY KEY,
+    data_pedido DATE,
+    cliente_id INT
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela contendo informações dos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Data do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'data_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do cliente.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'pedidos', @level2type=N'COLUMN',@level2name=N'cliente_id';
+GO
+
+-- Cria a Tabela Itens_Pedido
+CREATE TABLE lojas.itens_pedido (
+    item_id INT PRIMARY KEY,
+    pedido_id INT,
+    produto_id INT,
+    quantidade INT,
+    preco_unitario DECIMAL(10, 2),
+    preco_unitario_com_desconto DECIMAL(10, 2),
+    subtotal DECIMAL(10, 2)
+);
+GO
+
+-- Comentários da Tabela e Colunas
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Tabela contendo informações dos itens dos pedidos das lojas UVV.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do item.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'item_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'pedido_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Número de identificação do produto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'produto_id';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Quantidade do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'quantidade';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Preço unitário do produto no pedido.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'preco_unitario';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Preço unitário do produto no pedido com desconto.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'preco_unitario_com_desconto';
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Subtotal do item.' , @level0type=N'SCHEMA',@level0name=N'lojas', @level1type=N'TABLE',@level1name=N'itens_pedido', @level2type=N'COLUMN',@level2name=N'subtotal';
+GO
+
+-- Cria a Chave Estrangeira da Tabela Produtos
+ALTER TABLE lojas.produtos ADD CONSTRAINT fk_produtos_categorias FOREIGN KEY (categoria_id) REFERENCES lojas.categorias(categoria_id);
+GO
+
+-- Cria a Chave Estrangeira da Tabela Pedidos
+ALTER TABLE lojas.pedidos ADD CONSTRAINT fk_pedidos_clientes FOREIGN KEY (cliente_id) REFERENCES lojas.clientes(cliente_id);
+GO
+
+-- Cria a Chave Estrangeira da Tabela Itens_Pedido
+ALTER TABLE lojas.itens_pedido ADD CONSTRAINT fk_itens_pedido_pedidos FOREIGN KEY (pedido_id) REFERENCES lojas.pedidos(pedido_id);
+ALTER TABLE lojas.itens_pedido ADD CONSTRAINT fk_itens_pedido_produtos FOREIGN KEY (produto_id) REFERENCES lojas.produtos(produto_id);
+GO
+
+-- Cria o Índice da Tabela Produtos
+CREATE INDEX idx_produtos_nome ON lojas.produtos (nome);
+GO
+
+-- Cria o Índice da Tabela Pedidos
+CREATE INDEX idx_pedidos_data_pedido ON lojas.pedidos (data_pedido);
+GO
+
+-- Cria o Índice da Tabela Itens_Pedido
+CREATE INDEX idx_itens_pedido_pedido_id ON lojas.itens_pedido (pedido_id);
+GO
+
+-- Fim do Script
